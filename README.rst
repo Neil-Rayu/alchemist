@@ -6,6 +6,7 @@ COMMON COMMAND
 ======================================
 
 .. code-block:: bash
+  
   mkdir /mnt/data && mount /dev/sr1 /mnt/data
   /mnt/data/autorun.sh
 
