@@ -2,21 +2,18 @@
 Automated Alpine QEMU Development Setup
 ======================================
 
-COMMON COMMAND's
+Quick Command Reference
 ======================================
 
 .. code-block:: bash
 
+  # Shared directory for your Go binary
   mkdir /shared && mount -t 9p -o trans=virtio shared /shared
   # Your binary is at: /shared/myapp
-  
+
+  # OUTDATED: Mounting data ISO
   mkdir /mnt/data && mount /dev/sr1 /mnt/data
   /mnt/data/autorun.sh
-
-  apk add openssh
-  rc-update add sshd default
-  rc-service sshd start
-  passwd root  # Set a password
 
 
 ======================================
@@ -35,18 +32,25 @@ Prerequisites
    # Install required tools on macOS
    brew install qemu cdrtools
 
+   #install Go if not already installed
+   brew install go
+
+   #Install alpine ISO
+   wget https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/alpine-virt-3.22.0-x86_64.iso --O alpine-standard.iso   
+
 Directory Structure
 -------------------
 
 ::
 
-   your-project/
-   ├── main.go              # Your Go application
-   ├── run-alpine.sh        # Main script (see below)
-   ├── alpine-standard.iso  # Downloaded Alpine ISO
-   ├── data.iso            # Generated data ISO with your binary
-   └── data/               # Temporary directory for binary
-       └── myapp           # Compiled Linux binary
+  your-project/
+  ├── main.go               # Your Go source
+  ├── runner.sh             # Start Alpine with shared folder
+  ├── build.sh              # Quick build script
+  ├── shared/               # Shared folder with host
+  │   └── myapp             # Your Linux binary (auto-generated)
+  └── alpine-standard.iso   # Alpine ISO
+
 
 Main Script: runner.sh
 ===========================
@@ -55,91 +59,54 @@ Create this script to automate everything:
 
 .. code-block:: bash
 
-   #!/bin/bash
+  #!/bin/bash
 
-   set -e
+  set -e
 
-   # Colors for output
-   RED='\033[0;31m'
-   GREEN='\033[0;32m'
-   BLUE='\033[0;34m'
-   YELLOW='\033[1;33m'
-   NC='\033[0m' # No Color
+  # Colors for output
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  BLUE='\033[0;34m'
+  YELLOW='\033[1;33m'
+  NC='\033[0m' # No Color
 
-   echo -e "${BLUE}Building Go binary for Linux...${NC}"
-   GOOS=linux GOARCH=amd64 go build -o myapp main.go
+  echo -e "${BLUE}Building Go binary for Linux...${NC}"
+  GOOS=linux GOARCH=amd64 go build -o myapp main.go
 
-   echo -e "${BLUE}Creating data ISO with your binary...${NC}"
-   mkdir -p data
-   cp myapp data/
+  # Create shared directory if it doesn't exist
+  mkdir -p shared
+  cp myapp shared/
 
-   # Create startup script that runs automatically
-   cat > data/autorun.sh << 'EOF'
-   #!/bin/ash
-   echo "Auto-setting up your Go binary..."
-   mkdir -p /mnt/data
-   mount /dev/sr1 /mnt/data 2>/dev/null || echo "Data already mounted"
-   cp /mnt/data/myapp /root/ 2>/dev/null || echo "Binary already copied"
-   chmod +x /root/myapp
-   echo "Your binary is ready at: /root/myapp"
-   echo "Run it with: ./myapp"
-   echo "To re-run setup: /mnt/data/autorun.sh"
-   EOF
+  # Download Alpine if not present
+  if [ ! -f alpine-standard.iso ]; then
+      echo -e "${BLUE}Downloading Alpine Linux ISO...${NC}"
+      wget -q https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/alpine-virt-3.22.0-x86_64.iso -O alpine-standard.iso
+  fi
 
-   chmod +x data/autorun.sh
+  echo -e "${GREEN}Starting Alpine Linux with shared folder...${NC}"
+  echo ""
+  echo -e "${YELLOW}SETUP INSTRUCTIONS:${NC}"
+  echo -e "   ${GREEN}1. Login as: root${NC} (no password)"
+  echo -e "   ${GREEN}2. Mount shared folder: mkdir /shared && mount -t 9p -o trans=virtio shared /shared${NC}"
+  echo -e "   ${GREEN}3. Your binary is at: /shared/myapp${NC}"
+  echo -e "   ${GREEN}4. Run: /shared/myapp${NC}"
+  echo ""
+  echo -e "${YELLOW}One-liner setup:${NC}"
+  echo "   mkdir /shared && mount -t 9p -o trans=virtio shared /shared && /shared/myapp"
+  echo ""
+  echo -e "${BLUE}Press Ctrl+A then X to exit QEMU${NC}"
+  echo ""
 
-   # Create manual setup script for reference
-   cat > data/setup.sh << 'EOF'
-   #!/bin/ash
-   mkdir -p /mnt/data
-   mount /dev/sr1 /mnt/data
-   cp /mnt/data/myapp /root/
-   chmod +x /root/myapp
-   echo "Setup complete! Run with: ./myapp"
-   EOF
-
-   chmod +x data/setup.sh
-
-   # Create ISO
-   if command -v genisoimage > /dev/null; then
-       genisoimage -o data.iso -r data/ > /dev/null 2>&1
-   elif command -v mkisofs > /dev/null; then
-       mkisofs -o data.iso -r data/ > /dev/null 2>&1
-   else
-       echo -e "${RED}Need genisoimage or mkisofs. Install with: brew install cdrtools${NC}"
-       exit 1
-   fi
-
-   # Download Alpine if not present
-   if [ ! -f alpine-standard.iso ]; then
-       echo -e "${BLUE}Downloading Alpine Linux ISO...${NC}"
-       wget -q https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/alpine-virt-3.22.0-x86_64.iso -O alpine-standard.iso
-   fi
-
-   echo -e "${GREEN}Starting Alpine Linux with your Go binary...${NC}"
-   echo ""
-   echo -e "${YELLOW}QUICK SETUP IN ALPINE:${NC}"
-   echo -e "   ${GREEN}Login as: root${NC} (no password)"
-   echo -e "   ${GREEN}Run: /mnt/data/autorun.sh${NC} (auto-setup)"
-   echo -e "   ${GREEN}Then: ./myapp${NC} (run your program)"
-   echo ""
-   echo -e "${YELLOW}Manual commands if needed:${NC}"
-   echo "   mkdir /mnt/data && mount /dev/sr1 /mnt/data"
-   echo "   cp /mnt/data/myapp /root/ && chmod +x /root/myapp"
-   echo ""
-   echo -e "${BLUE}Press Ctrl+A then X to exit QEMU${NC}"
-   echo ""
-
-   qemu-system-x86_64 \
-     -m 1024 \
-     -smp 2 \
-     -nographic \
-     -netdev user,id=net0,hostfwd=tcp::2222-:22 \
-     -device virtio-net,netdev=net0 \
-     -drive file=alpine-standard.iso,format=raw,media=cdrom \
-     -drive file=data.iso,format=raw,media=cdrom \
-     -boot d
-
+  qemu-system-x86_64 \
+    -m 1024 \
+    -smp 2 \
+    -nographic \
+    -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+    -device virtio-net,netdev=net0 \
+    -drive file=alpine-standard.iso,format=raw,media=cdrom \
+    -virtfs local,path=./shared,mount_tag=shared,security_model=passthrough \
+    -boot d
+    
 Development Workflow
 ====================
 
@@ -154,18 +121,7 @@ Development Workflow
    # First run
    ./runner.sh
 
-2. Development Loop
--------------------
-
-.. code-block:: bash
-
-   # Edit your main.go
-   vim main.go
-
-   # Test in Alpine (rebuilds automatically)
-   ./runner.sh
-
-3. In Alpine Terminal
+2. In Alpine Terminal
 ---------------------
 
 .. code-block:: bash
@@ -174,13 +130,21 @@ Development Workflow
    root
 
    # Mount data ISO
-   mkdir /mnt/data && mount /dev/sr1 /mnt/data
-
-   # Quick setup (one command)
-   /mnt/data/autorun.sh
+   mkdir /shared && mount -t 9p -o trans=virtio shared /shared
 
    # Run your program
-   ./myapp
+   /shared/myapp run ...
+
+3. Development Loop
+-------------------
+
+.. code-block:: bash
+
+   # Edit your main.go
+   vim main.go
+
+   # Test in Alpine (rebuilds automatically)
+   ./build.sh
 
 Advanced Features
 =================
@@ -255,33 +219,6 @@ Common Issues
       # Press: Ctrl+A, then X
       # Or from Alpine: poweroff
 
-Debugging
----------
-
-To see what's in your data ISO:
-
-.. code-block:: bash
-
-   # Mount the ISO on macOS to inspect
-   hdiutil mount data.iso
-   ls /Volumes/CDROM/
-   hdiutil unmount /Volumes/CDROM/
-
-To check if your binary is correct:
-
-.. code-block:: bash
-
-   file myapp  # Should show: Linux x86-64 executable
-
-Tips
-====
-
-- **Fast iteration**: Keep Alpine running and just rebuild/remount
-- **Multiple binaries**: Put multiple programs in the data/ directory
-- **Configuration files**: Add config files to data/ directory too
-- **Networking**: Alpine has full network access to download packages
-- **File sharing**: Use the data ISO to share any files with Alpine
-
 Example main.go
 ===============
 
@@ -305,4 +242,4 @@ Example main.go
        fmt.Println("This is where your container runtime would go!")
    }
 
-This setup gives you a lightweight, fast development environment for testing Go programs in isolated Linux containers!
+This setup gives you a lightweight, fast development environment for testing Go programs in isolated Linux containers 0-0
