@@ -2,13 +2,22 @@
 Automated Alpine QEMU Development Setup
 ======================================
 
-COMMON COMMAND
+COMMON COMMAND's
 ======================================
 
 .. code-block:: bash
+
+  mkdir /shared && mount -t 9p -o trans=virtio shared /shared
+  # Your binary is at: /shared/myapp
   
   mkdir /mnt/data && mount /dev/sr1 /mnt/data
   /mnt/data/autorun.sh
+
+  apk add openssh
+  rc-update add sshd default
+  rc-service sshd start
+  passwd root  # Set a password
+
 
 ======================================
 
@@ -39,7 +48,7 @@ Directory Structure
    └── data/               # Temporary directory for binary
        └── myapp           # Compiled Linux binary
 
-Main Script: run-alpine.sh
+Main Script: runner.sh
 ===========================
 
 Create this script to automate everything:
@@ -131,58 +140,6 @@ Create this script to automate everything:
      -drive file=data.iso,format=raw,media=cdrom \
      -boot d
 
-Even Easier: Full Automation Script
-====================================
-
-For completely hands-off operation:
-
-.. code-block:: bash
-
-   #!/bin/bash
-   # run-alpine-auto.sh - Fully automated version
-
-   set -e
-
-   echo "Building and setting up..."
-   GOOS=linux GOARCH=amd64 go build -o myapp main.go
-
-   mkdir -p data
-   cp myapp data/
-
-   # Create a script that runs your program automatically on boot
-   cat > data/autostart.sh << 'EOF'
-   #!/bin/ash
-   echo "Auto-starting Go application..."
-   mkdir -p /mnt/data
-   mount /dev/sr1 /mnt/data
-   cp /mnt/data/myapp /root/
-   chmod +x /root/myapp
-   echo "Running your Go program:"
-   /root/myapp
-   echo "Program finished. You're now in Alpine Linux shell."
-   EOF
-
-   chmod +x data/autostart.sh
-
-   genisoimage -o data.iso -r data/ > /dev/null 2>&1
-
-   # Download Alpine if needed
-   [ ! -f alpine-standard.iso ] && wget -q https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/alpine-virt-3.22.0-x86_64.iso -O alpine-standard.iso
-
-   echo "Starting Alpine - your program will run automatically after login!"
-   echo "   Login as: root (no password)"
-   echo "   Run: /mnt/data/autostart.sh"
-
-   qemu-system-x86_64 \
-     -m 1024 \
-     -smp 2 \
-     -nographic \
-     -netdev user,id=net0 \
-     -device virtio-net,netdev=net0 \
-     -drive file=alpine-standard.iso,format=raw,media=cdrom \
-     -drive file=data.iso,format=raw,media=cdrom \
-     -boot d
-
 Development Workflow
 ====================
 
@@ -192,10 +149,10 @@ Development Workflow
 .. code-block:: bash
 
    # Make script executable
-   chmod +x run-alpine.sh
+   chmod +x runner.sh
 
    # First run
-   ./run-alpine.sh
+   ./runner.sh
 
 2. Development Loop
 -------------------
@@ -206,7 +163,7 @@ Development Workflow
    vim main.go
 
    # Test in Alpine (rebuilds automatically)
-   ./run-alpine.sh
+   ./runner.sh
 
 3. In Alpine Terminal
 ---------------------
@@ -215,6 +172,9 @@ Development Workflow
 
    # Login
    root
+
+   # Mount data ISO
+   mkdir /mnt/data && mount /dev/sr1 /mnt/data
 
    # Quick setup (one command)
    /mnt/data/autorun.sh
