@@ -7,13 +7,22 @@ Quick Command Reference
 
 .. code-block:: bash
 
-  # Shared directory for your Go binary
-  mkdir /shared && mount -t 9p -o trans=virtio shared /shared
+  # One-Liner for Shared directory for your Go binary and minifs
+  mkdir /shared && mount -t 9p -o trans=virtio shared /shared && /shared/setup-minifs.sh
   # Your binary is at: /shared/myapp
 
   # OUTDATED: Mounting data ISO
   mkdir /mnt/data && mount /dev/sr1 /mnt/data
   /mnt/data/autorun.sh
+
+  # CGROUP TEST
+  # Mount the pids controller directly to its directory
+  mount -t cgroup -o pids cgroup /sys/fs/cgroup/pids
+
+  # Mount the cpu controller  
+  mount -t cgroup -o cpu cgroup /sys/fs/cgroup/cpu
+
+  for i in $(seq 1 4); do sleep 60 & done
 
 
 ======================================
